@@ -1,28 +1,17 @@
 import gym
 import random
 import numpy as np
-from GameTickPacket import GameData
 from Plotter import Plotter
 
-policy = [[None for i in range(0,15)]for x in range(0,19)] # Policy for agent defined by state space
-q = [[[0 for y in range(0,3)]for i in range(0,15)]for x in range(0,19)] # State-action-value matrix
+policy = [[None for _ in range(0, 15)]for _ in range(0, 19)]  # Policy for agent defined by state space
+q = [[[0 for _ in range(0, 3)]for _ in range(0, 15)]for _ in range(0, 19)]  # State-action-value matrix
 plotter = Plotter()
-ep = 0 # Episode
-max = 10000 # Max episode
-latest_states = [[0 for y in range(0,3)]for i in range(0,1000)] # States accessed in the latest episode
-epsilon = 0 # Mutation rate
-reward = [] # Episode reward matrix
+ep = 0  # Episode
+max = 10000  # Max episode
+latest_states = [[0 for _ in range(0, 3)]for _ in range(0, 1000)]  # States accessed in the latest episode
+epsilon = 0  # Mutation rate
+reward = []  # Episode reward matrix
 mutated = []
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 
 def state_formatter(state):
@@ -53,6 +42,7 @@ def state_formatter(state):
 
     return integer
 
+
 def calc_q(latest_states):
     """
     updates state values
@@ -67,6 +57,7 @@ def calc_q(latest_states):
                     q[i][p][latest_states[u][2]] = (q[i][p][latest_states[u][2]]/2) + reward[ep]
 
     return q
+
 
 def greedy():
     """
@@ -87,6 +78,7 @@ def greedy():
                     policy[i][p] = random.randint(0,2)
     return policy
 
+
 def calc_reward():
     """
     calculates episode reward by finding the maximum X value
@@ -95,6 +87,7 @@ def calc_reward():
     for i in range(1000):
         arr.append(latest_states[i][0])
     return np.max(arr)
+
 
 env = gym.make('MountainCar-v0') # Make environemnt
 
