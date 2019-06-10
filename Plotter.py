@@ -8,5 +8,4 @@ class Plotter:
         style = 'ro-'
 
         plt.plot(range(len(arr)), arr, style, markersize=2, linewidth=2)
-
-        plt.show()
+        plt.show(block=False)

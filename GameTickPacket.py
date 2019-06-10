@@ -48,9 +48,9 @@ class GameTickPacket:
 
     def update(self, tick, action):
         state, reward, end, info = tick
-
-        state[0] = state[0].round(1) * 10
-        state[1] = state[1].round(2) * 100
+        state : Int
+        state[0] = int(state[0].round(1) * 10)
+        state[1] = int(state[1].round(2) * 100)
 
         self.state.append(State(state, action))
         self.end.append(end)

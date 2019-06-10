@@ -4,137 +4,137 @@ import numpy as np
 from GameTickPacket import GameData
 from Plotter import Plotter
 
+policy = [[None for i in range(0,15)]for x in range(0,19)] # Policy for agent defined by state space
+q = [[[0 for y in range(0,3)]for i in range(0,15)]for x in range(0,19)] # State-action-value matrix
+plotter = Plotter()
+ep = 0 # Episode
+max = 10000 # Max episode
+latest_states = [[0 for y in range(0,3)]for i in range(0,1000)] # States accessed in the latest episode
+epsilon = 0 # Mutation rate
+reward = [] # Episode reward matrix
+mutated = []
 
-class Trainer:
-
-    def __init__(self):
-        self.plotter = Plotter()
-        self.state_indices = [[]] * 855
-        self.epsilon = 2
-        self.ep = 0
-        self.env = gym.make("MountainCar-v0")
-        self.max_states = 855
-        self.game_data = GameData()
-        self.tick = self.game_data.game_tick_packet
-        self.episodes = self.game_data.episode_packet.episodes
-        self.policy = [[None, None, None] for _ in range(self.max_states)]
-        self.min_error = 0
-        self.alpha = 1
-        self.epsilon_decay = 0.999
-        self.max = 10000
-        self.avg_reward = []
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 
-    def main(self):
-        while self.ep < self.max:
-            state = self.env.reset()
-            state[0] = state[0].round(1) * 10
-            state[1] = state[1].round(2) * 100
+def state_formatter(state):
+    """
+    formats state space to positive wole numbers
+    """
 
-            while True not in self.tick.end:
-                if self.ep % 100 == 0:
-                    self.env.render()
+    # Round state space to tenths place to form finite values
+
+    state[0] = state[0].round(1)
+    state[1] = state[1].round(2)
+
+    # Make numbers whole
+
+    state[0] *= 10
+    state[1] *= 100
+
+    # Make numbers whole
+
+    state[0] += 12
+    state[1] += 7
+
+    # Change data type
+
+    integer = [0,0]
+    integer[0] = int(state[0])
+    integer[1] = int(state[1])
+
+    return integer
+
+def calc_q(latest_states):
+    """
+    updates state values
+    """
+    for i in range(0,19):
+        for p in range(0,15):
+            for u in range(1000):
+
+                # If value occurs in last episode, update it according to episode reward
+
+                if [i, p, policy[i][p]] == [latest_states[u][0], latest_states[u][1], latest_states[u][2]]:
+                    q[i][p][latest_states[u][2]] = (q[i][p][latest_states[u][2]]/2) + reward[ep]
+
+    return q
+
+def greedy():
+    """
+    calculates optimal policy
+    """
+    for i in range(0,19):
+        for p in range(0,15):
+
+            # If state is unexplored, do not calculate optimal action
+            # Else, update the policy accoring to epsilon
+
+            if q[i][p][0] == 0 and q[i][p][1] == 0 and q[i][p][2] == 0:
+                policy[i][p] = None
+            else:
+                if epsilon > random.uniform(0,1):
+                    policy[i][p] = q[i][p].index(np.max(q[i][p]))
                 else:
-                    self.env.close()
+                    policy[i][p] = random.randint(0,2)
+    return policy
 
-                action = None
-                if self.policy is not None:
-                    for i in self.policy:
-                        if i[0] == state[0] and i[1] == state[1]:
-                            action = i[2]
+def calc_reward():
+    """
+    calculates episode reward by finding the maximum X value
+    """
+    arr = []
+    for i in range(1000):
+        arr.append(latest_states[i][0])
+    return np.max(arr)
 
-                if action is None:
-                    action = self.env.action_space.sample()
-                    print("yay "+str(self.ep))
-                self.tick.update(self.env.step(action), action)
-                state = self.tick.state[self.tick.count].state_action[:2]
-                self.tick.tick()
+env = gym.make('MountainCar-v0') # Make environemnt
 
-            self.game_data.reset()
+while ep < max:
+    epsilon += 0.001 # Update epsilon for convergence
+    count = 0 # Reset frame counter
+    formatted_state = state_formatter(env.reset()) # Reset environment
+    while count < 999:
 
-            q = self.calc_q(self.tick.unique_state_indices, self.episodes[len(self.episodes) - 1].reward)
-            temp = self.greedy(self.tick.unique_state_indices, q)
+        # If state is unexplored, use uniform random action
 
-            for i, p in enumerate(temp):
-                self.policy[i] = p
-                self.state_indices[i] = p[:2]
+        if policy[formatted_state[0]][formatted_state[1]] == None:
+            policy[formatted_state[0]][formatted_state[1]] = random.randint(0,2)
 
-            if self.ep % 100 == 0:
-                print("----------")
-                print("[*] Policy at episode "+str(self.ep))
-                for i, p in enumerate(temp):
-                    print(self.policy[i])
+        # Step forward in environment with action and receive new state
 
-            if self.ep % 100 == 0:
-                self.plotter.show(self.avg_reward)
+        state, rew, end, info = env.step(policy[formatted_state[0]][formatted_state[1]])
 
-            #self.epsilon *= self.epsilon_decay
-            self.ep += 1
+        # Set local state space
 
-    def calc_q(self, unique_states, episode_reward):
-        values = []
-        # print()
-        # print("----------------- ENCOUNTERED STATES -----------------")
-        # print()
+        latest_states[count][0] = formatted_state[0]
+        latest_states[count][1] = formatted_state[1]
+        latest_states[count][2] = policy[formatted_state[0]][formatted_state[1]]
 
-        for count, (i, p) in enumerate(zip(unique_states, unique_states.values())):
+        # Format new state space
 
-            frame = None
-            episode = None
+        formatted_state = state_formatter(state)
+        count += 1
 
-            for c in range(len(self.tick.gametime)):
-                try:
-                    episode = c
-                    frame = self.tick.gametime[c].index(i)
-                    break
-                except Exception:
-                    pass
+    reward.append(calc_reward()) # Append reward matrix for graph
+    print('#'*reward[ep]+" "+str(reward[ep])) # Graph
+    q = calc_q(latest_states) # Calculate Q
+    policy = greedy() # e-greedy function
+    if ep % 100 == 0:
 
-            if self.episodes[episode].state_history[frame].state_action in [i.state_action for i in self.episodes[len(self.episodes)-1].state_history]:
-                self.episodes[episode].state_history[frame].value += self.episodes[len(self.episodes)-1].reward
-
-            values.append(self.episodes[episode].state_history[frame].value)
-            #print(str(count) + " -> " + str(p) + " -> " + str(self.episodes[episode].state_history[frame].value))
-
-        self.avg_reward.append(self.episodes[len(self.episodes)-1].reward)
-
-        return values
-
-    def greedy(self, unique_states, q):
-        raw_state = [i for i in unique_states.values()]
-        state_groups = [[]]
-        for u, p in enumerate(raw_state):
-            group = []
-            for i, x in enumerate(raw_state):
-                if x[0] == p[0] and x[1] == p[1] and i not in (item for sublist in state_groups for item in sublist):
-                    group.append(i)
-            state_groups.append(group)
-
-        state_groups = [x for x in state_groups if x]
-
-        maximums = []
-
-        for p in range(len(state_groups)):
-            arr = []
-            for i in range(len(state_groups[p])):
-                arr.append(q[state_groups[p][i]])
-            maximums.append(arr.index(np.max(arr)))
-
-        # print()
-        # print("----------------- OPTIMAL STATE ACTIONS -----------------")
-        # print()
-
-        updated_policy = []
-
-        for p in range(len(state_groups)):
-            # print(raw_state[state_groups[p][maximums[p]]])
-            updated_policy.append(raw_state[state_groups[p][maximums[p]]])
-        if random.uniform(0, 1) > self.epsilon:
-            print('epsilon')
-            updated_policy[random.randint(0, len(updated_policy)-1)][2] = self.env.action_space.sample()
-
-        return updated_policy
-
-
-t = Trainer()
-t.main()
+        # DEBUG:
+        print("EPISODE "+str(ep))
+        print("----------------------------")
+        print()
+        for i in policy:
+            print(bcolors.HEADER+str(i))
+        print(bcolors.ENDC)
+    ep += 1
