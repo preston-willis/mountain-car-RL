@@ -1,2 +1,2 @@
 # mountain-car-RL
-incomplete
+basic RL for gym mountain car
