@@ -8,10 +8,10 @@ import torch.optim as optimal
 from torch.autograd import Variable
 
 env = gym.make('MountainCar-v0')  # Make environment
-decay = 0.993
+decay = 0.999
 alpha = 0.01
 gamma = 0.9
-max_episodes = 1000  # Max episode
+max_episodes = 10000  # Max episode
 epsilon = 1  # Mutation rate
 reward_history = []
 
@@ -101,4 +101,4 @@ for ep in range(max_episodes):
 
     reward_history.append(reward)
     
-torch.save(policy.state_dict(), 'trained.mdl')
+torch.save(policy.state_dict(), 'trained-10000.mdl')
