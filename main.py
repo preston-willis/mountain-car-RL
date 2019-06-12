@@ -2,15 +2,37 @@ import gym
 import random
 import numpy as np
 from tqdm import tqdm
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 env = gym.make('MountainCar-v0')  # Make environment
 decay = 0.9993
-alpha = 0.1
-gamma = 1
+alpha = 0.001
+gamma = 0.9
 q = np.zeros((19, 15, 3))  # State-action-value matrix
 ep = 0  # Episode
 max = 21000  # Max episode
 epsilon = 1  # Mutation rate
+
+
+class Policy(nn.Module):
+    def __init__(self):
+        super(Policy, self).__init__()
+        self.state_space = env.observation_space.shape[0]
+        self.action_space = env.action_space.n
+        self.hidden = 200
+        self.l1 = nn.Linear(self.state_space, self.hidden, bias=False)
+        self.l2 = nn.Linear(self.hidden, self.action_space, bias=False)
+
+    def forward(self, x):
+        model = torch.nn.Sequential(
+            self.l1,
+            self.l2,
+        )
+        return model(x)
 
 
 def state_formatter(s):
@@ -41,6 +63,12 @@ def state_formatter(s):
 
     return integer
 
+
+policy = Policy()
+
+loss_fn = nn.MSELoss()
+optimizer = optim.SGD(policy.parameters(), lr=alpha)
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
 
 pbar = tqdm(range(max), ascii=" .oO0", bar_format="{l_bar}{bar}|{postfix}")
 policy = [[env.action_space.sample() for _ in range(0, 15)] for _ in range(0, 19)]
