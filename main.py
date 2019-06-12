@@ -4,18 +4,16 @@ import numpy as np
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
+import torch.optim as optimal
 from torch.autograd import Variable
 
 env = gym.make('MountainCar-v0')  # Make environment
-decay = 0.9993
-alpha = 0.001
+decay = 0.993
+alpha = 0.01
 gamma = 0.9
-q = np.zeros((19, 15, 3))  # State-action-value matrix
-ep = 0  # Episode
-max = 21000  # Max episode
+max_episodes = 1000  # Max episode
 epsilon = 1  # Mutation rate
+reward_history = []
 
 
 class Policy(nn.Module):
@@ -35,77 +33,72 @@ class Policy(nn.Module):
         return model(x)
 
 
-def state_formatter(s):
-    """
-    formats state space to positive wole numbers
-    """
-
-    # Round state space to tenths place to form finite values
-
-    s[0] = s[0].round(1)
-    s[1] = s[1].round(2)
-
-    # Make numbers whole
-
-    s[0] *= 10
-    s[1] *= 100
-
-    # Make numbers whole
-
-    s[0] += 12
-    s[1] += 7
-
-    # Change data type
-
-    integer = [0, 0]
-    integer[0] = int(s[0])
-    integer[1] = int(s[1])
-
-    return integer
-
-
 policy = Policy()
-
 loss_fn = nn.MSELoss()
-optimizer = optim.SGD(policy.parameters(), lr=alpha)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
+optimizer = optimal.SGD(policy.parameters(), lr=alpha)
+scheduler = optimal.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
 
-pbar = tqdm(range(max), ascii=" .oO0", bar_format="{l_bar}{bar}|{postfix}")
-policy = [[env.action_space.sample() for _ in range(0, 15)] for _ in range(0, 19)]
-policy = np.array(policy)
+progress_bar = tqdm(range(max_episodes), ascii=" .oO0", bar_format="{l_bar}{bar}|{postfix}")
 
-for ep in range(max):
-    pbar.update(1)
+for ep in range(max_episodes):
+    progress_bar.update(1)
+    progress_bar.set_postfix(Epsilon=str(round(epsilon, 2)))
+
     epsilon *= decay
+    total_reward = 0
+
     if epsilon < 0.1:
-        epsilon = 0.1  # Update epsilon for convergence
-    if ep == 20000:
+        epsilon = 0.1
+
+    if ep > 900:
         epsilon = 0
         alpha = 0
-    pbar.set_postfix(Epsilon=str(round(epsilon, 2)))
+        gamma = 0
 
-    state = state_formatter(env.reset())  # Reset environment
+    state = env.reset()
+
     while True:
 
-        if ep > 20000 and ep is not 0:
-            env.render()
-        else:
-            env.close()
+        #  sample Q values from policy
+        Q = policy.forward(torch.from_numpy(state).type(torch.FloatTensor))  # " Q(s, a) "
 
-        if random.uniform(0, 1) > epsilon:
-            action = np.argmax(q[state[0], state[1], :])
-            policy[state[0], state[1]] = action
-        else:
+        if random.uniform(0, 1) < epsilon:
             action = env.action_space.sample()
+        else:
+            #  find optimal action according to policy (over axis -1)
+            _, max = torch.max(Q, -1)
+            action = max.item()
 
-        new_state, reward, end, info = env.step(action)
+        new_state, reward, terminal, _ = env.step(action)
 
-        if end:
-            break
+        total_reward += reward
 
-        new_state = state_formatter(new_state)
+        Q_new = policy.forward(torch.from_numpy(new_state).type(torch.FloatTensor))  # " find Q (s', a') "
 
-        q[state[0], state[1], action] += alpha * (reward + gamma*np.max(q[new_state[0], new_state[1], :]) -
-                                                  q[state[0], state[1], action])
+        #  find optimal action Q value for next step
+        new_max, _ = torch.max(Q_new, -1)  # " max(Q(s', a')) "
+
+        Q_target = Q.clone()
+        Q_target = Variable(Q_target.data)
+
+        #  update target value function according to TD
+        Q_target[action] = reward + torch.mul(new_max.detach(), gamma)  # " reward + gamma*(max(Q(s', a')) "
+
+        # Calculate loss
+        loss = loss_fn(Q, Q_target)  # " reward + gamma*(max(Q(s', a')) - Q(s, a)) "
+
+        # Update original policy according to Q_target ( supervised learning )
+        policy.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        #  Q and Q_target should converge
 
         state = new_state
+
+        if terminal:
+            break
+
+    reward_history.append(reward)
+    
+torch.save(policy.state_dict(), 'trained.mdl')
