@@ -100,4 +100,5 @@ for ep in range(max_episodes):
             break
 
     reward_history.append(reward)
-    torch.save(policy.state_dict(), 'trained.mdl')
+    
+torch.save(policy.state_dict(), 'trained.mdl')
