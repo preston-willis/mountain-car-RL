@@ -59,11 +59,6 @@ for ep in range(max_episodes):
 
     while True:
 
-        if (ep % 100 == 0 and ep is not 0) or ep > 900:
-            env.render()
-        else:
-            env.close()
-
         #  sample Q values from policy
         Q = policy.forward(torch.from_numpy(state).type(torch.FloatTensor))  # " Q(s, a) "
 
@@ -105,3 +100,4 @@ for ep in range(max_episodes):
             break
 
     reward_history.append(reward)
+    torch.save(policy.state_dict(), f'trained.mdl')
