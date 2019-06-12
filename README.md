@@ -1,4 +1,4 @@
-# Gym MountainCar-v0-RL
+# Gym MountainCar-v0 Reinforcement Learning
 Basic reinforcement learning implimentations for [Gym MountainCar-v0](https://github.com/openai/gym/wiki/MountainCar-v0)
 ## Algorithms
 - Monte Carlo
