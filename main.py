@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import gym
 import random
 import numpy as np
