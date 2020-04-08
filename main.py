@@ -1,104 +1,133 @@
 import gym
 import random
 import numpy as np
-from tqdm import tqdm
-import torch
-import torch.nn as nn
-import torch.optim as optimal
-from torch.autograd import Variable
+from Plotter import Plotter
 
-env = gym.make('MountainCar-v0')  # Make environment
-decay = 0.999
-alpha = 0.01
-gamma = 0.9
-max_episodes = 10000  # Max episode
-epsilon = 1  # Mutation rate
-reward_history = []
+policy = [[None for _ in range(0, 15)]for _ in range(0, 19)]  # Policy for agent defined by state space
+q = [[[0 for _ in range(0, 3)]for _ in range(0, 15)]for _ in range(0, 19)]  # State-action-value matrix
+plotter = Plotter()
+ep = 0  # Episode
+max = 10000  # Max episode
+latest_states = [[0 for _ in range(0, 3)]for _ in range(0, 1000)]  # States accessed in the latest episode
+epsilon = 0  # Mutation rate
+reward = []  # Episode reward matrix
+mutated = []
 
 
-class Policy(nn.Module):
-    def __init__(self):
-        super(Policy, self).__init__()
-        self.state_space = env.observation_space.shape[0]
-        self.action_space = env.action_space.n
-        self.hidden = 200
-        self.l1 = nn.Linear(self.state_space, self.hidden, bias=False)
-        self.l2 = nn.Linear(self.hidden, self.action_space, bias=False)
+def state_formatter(state):
+    """
+    formats state space to positive wole numbers
+    """
 
-    def forward(self, x):
-        model = torch.nn.Sequential(
-            self.l1,
-            self.l2,
-        )
-        return model(x)
+    # Round state space to tenths place to form finite values
+
+    state[0] = state[0].round(1)
+    state[1] = state[1].round(2)
+
+    # Make numbers whole
+
+    state[0] *= 10
+    state[1] *= 100
+
+    # Make numbers whole
+
+    state[0] += 12
+    state[1] += 7
+
+    # Change data type
+
+    integer = [0,0]
+    integer[0] = int(state[0])
+    integer[1] = int(state[1])
+
+    return integer
 
 
-policy = Policy()
-loss_fn = nn.MSELoss()
-optimizer = optimal.SGD(policy.parameters(), lr=alpha)
-scheduler = optimal.lr_scheduler.StepLR(optimizer, step_size=1, gamma=gamma)
+def calc_q(latest_states):
+    """
+    updates state values
+    """
+    for i in range(0,19):
+        for p in range(0,15):
+            for u in range(1000):
 
-progress_bar = tqdm(range(max_episodes), ascii=" .oO0", bar_format="{l_bar}{bar}|{postfix}")
+                # If value occurs in last episode, update it according to episode reward
 
-for ep in range(max_episodes):
-    progress_bar.update(1)
-    progress_bar.set_postfix(Epsilon=str(round(epsilon, 2)))
+                if [i, p, policy[i][p]] == [latest_states[u][0], latest_states[u][1], latest_states[u][2]]:
+                    q[i][p][latest_states[u][2]] = (q[i][p][latest_states[u][2]]/2) + reward[ep]
 
-    epsilon *= decay
-    total_reward = 0
+    return q
 
-    if epsilon < 0.1:
-        epsilon = 0.1
 
-    if ep > 900:
-        epsilon = 0
-        alpha = 0
-        gamma = 0
+def greedy():
+    """
+    calculates optimal policy
+    """
+    for i in range(0,19):
+        for p in range(0,15):
 
-    state = env.reset()
+            # If state is unexplored, do not calculate optimal action
+            # Else, update the policy accoring to epsilon
 
-    while True:
+            if q[i][p][0] == 0 and q[i][p][1] == 0 and q[i][p][2] == 0:
+                policy[i][p] = None
+            else:
+                if epsilon > random.uniform(0,1):
+                    policy[i][p] = q[i][p].index(np.max(q[i][p]))
+                else:
+                    policy[i][p] = random.randint(0,2)
+    return policy
 
-        #  sample Q values from policy
-        Q = policy.forward(torch.from_numpy(state).type(torch.FloatTensor))  # " Q(s, a) "
 
-        if random.uniform(0, 1) < epsilon:
-            action = env.action_space.sample()
-        else:
-            #  find optimal action according to policy (over axis -1)
-            _, max = torch.max(Q, -1)
-            action = max.item()
+def calc_reward():
+    """
+    calculates episode reward by finding the maximum X value
+    """
+    arr = []
+    for i in range(1000):
+        arr.append(latest_states[i][0])
+    return np.max(arr)
 
-        new_state, reward, terminal, _ = env.step(action)
 
-        total_reward += reward
+env = gym.make('MountainCar-v0') # Make environemnt
 
-        Q_new = policy.forward(torch.from_numpy(new_state).type(torch.FloatTensor))  # " find Q (s', a') "
+while ep < max:
+    epsilon += 0.001 # Update epsilon for convergence
+    count = 0 # Reset frame counter
+    formatted_state = state_formatter(env.reset()) # Reset environment
+    while count < 999:
 
-        #  find optimal action Q value for next step
-        new_max, _ = torch.max(Q_new, -1)  # " max(Q(s', a')) "
+        # If state is unexplored, use uniform random action
 
-        Q_target = Q.clone()
-        Q_target = Variable(Q_target.data)
+        if policy[formatted_state[0]][formatted_state[1]] == None:
+            policy[formatted_state[0]][formatted_state[1]] = random.randint(0,2)
 
-        #  update target value function according to TD
-        Q_target[action] = reward + torch.mul(new_max.detach(), gamma)  # " reward + gamma*(max(Q(s', a')) "
+        # Step forward in environment with action and receive new state
 
-        # Calculate loss
-        loss = loss_fn(Q, Q_target)  # " reward + gamma*(max(Q(s', a')) - Q(s, a)) "
+        state, rew, end, info = env.step(policy[formatted_state[0]][formatted_state[1]])
 
-        # Update original policy according to Q_target ( supervised learning )
-        policy.zero_grad()
-        loss.backward()
-        optimizer.step()
+        # Set local state space
 
-        #  Q and Q_target should converge
+        latest_states[count][0] = formatted_state[0]
+        latest_states[count][1] = formatted_state[1]
+        latest_states[count][2] = policy[formatted_state[0]][formatted_state[1]]
 
-        state = new_state
+        # Format new state space
 
-        if terminal:
-            break
+        formatted_state = state_formatter(state)
+        count += 1
 
-    reward_history.append(reward)
-    
-torch.save(policy.state_dict(), 'trained-10000.mdl')
+    reward.append(calc_reward()) # Append reward matrix for graph
+    print('#'*reward[ep]+" "+str(reward[ep])) # Graph
+    q = calc_q(latest_states) # Calculate Q
+    policy = greedy() # e-greedy function
+    if ep % 100 == 0:
+
+        # DEBUG:
+        print("EPISODE "+str(ep))
+        print("----------------------------")
+        print()
+        for i in policy:
+            print(bcolors.HEADER+str(i))
+        print(bcolors.ENDC)
+    ep += 1
