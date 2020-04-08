@@ -6,7 +6,7 @@ Basic reinforcement learning implimentations for [Gym MountainCar-v0](https://gi
 - Q-Learning ( Temporal Difference )
   - 80% success rate
 - DQN-Learning ( Temporal Difference )
-  - Incomplete
+  - Fully functional; added extensive metrics
 
 ## Trained Models
 All trained DQN models are stored in [Models/](https://github.com/iamPres/mountain-car-RL/tree/DQN-learning/Models)
