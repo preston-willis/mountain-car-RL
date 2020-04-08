@@ -7,8 +7,13 @@ Basic reinforcement learning implimentations for [Gym MountainCar-v0](https://gi
   - 80% success rate
 - DQN-Learning ( Temporal Difference )
   - Fully functional; added extensive metrics
+- DQN-I2A-Learning
+  - Agent successfully predicts future environment state
 
 ## Trained Models
 All trained DQN models are stored in [Models/](https://github.com/iamPres/mountain-car-RL/tree/DQN-learning/Models)
 
+## DQN Performance
 ![GitHub Logo](/Figure_2.png)
+## I2A Performance
+
