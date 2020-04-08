@@ -1,133 +1,155 @@
 import gym
 import random
 import numpy as np
-from Plotter import Plotter
+from tqdm import tqdm
+import torch
+import torch.nn as nn
+import torch.optim as optimal
+from torch.autograd import Variable
+import matplotlib.pyplot as plt
+import matplotlib
+import math
+import pandas as pd
 
-policy = [[None for _ in range(0, 15)]for _ in range(0, 19)]  # Policy for agent defined by state space
-q = [[[0 for _ in range(0, 3)]for _ in range(0, 15)]for _ in range(0, 19)]  # State-action-value matrix
-plotter = Plotter()
-ep = 0  # Episode
-max = 10000  # Max episode
-latest_states = [[0 for _ in range(0, 3)]for _ in range(0, 1000)]  # States accessed in the latest episode
-epsilon = 0  # Mutation rate
-reward = []  # Episode reward matrix
-mutated = []
+env = gym.make('MountainCar-v0')  # Make environment
+env.seed(1); torch.manual_seed(1); np.random.seed(1)
 
+# HYPERPARAMETERS
+steps = 200
+decay = 0.95 # Epsilon Decay
+alpha = 0.001 # Learning rate
+gamma = 0.99 # Scheduler Parameter
+max_episodes = 1000  # Max episode
+epsilon = 0.3 # Mutation rate
 
-def state_formatter(state):
-    """
-    formats state space to positive wole numbers
-    """
+# DATA LOGGING
+reward_history = np.zeros(max_episodes)
+loss_history = np.zeros(max_episodes)
+epsilon_history = np.zeros(max_episodes)
+max_position_history = np.zeros(max_episodes)
+final_position_history = np.zeros(max_episodes)
+max_position = -math.inf
+successes = 0
 
-    # Round state space to tenths place to form finite values
-
-    state[0] = state[0].round(1)
-    state[1] = state[1].round(2)
-
-    # Make numbers whole
-
-    state[0] *= 10
-    state[1] *= 100
-
-    # Make numbers whole
-
-    state[0] += 12
-    state[1] += 7
-
-    # Change data type
-
-    integer = [0,0]
-    integer[0] = int(state[0])
-    integer[1] = int(state[1])
-
-    return integer
+# MATPLOTLIB
+figure = plt.figure()
+fig, ax = plt.subplots(2, 2)
+fig.tight_layout()
 
 
-def calc_q(latest_states):
-    """
-    updates state values
-    """
-    for i in range(0,19):
-        for p in range(0,15):
-            for u in range(1000):
+# DQN NETWORK
+class Policy(nn.Module):
+    def __init__(self):
+        super(Policy, self).__init__()
+        self.state_space = env.observation_space.shape[0]
+        self.action_space = env.action_space.n
+        self.hidden = 100
+        self.l1 = nn.Linear(self.state_space, self.hidden, bias=False)
+        self.l2 = nn.Linear(self.hidden, self.action_space, bias=False)
 
-                # If value occurs in last episode, update it according to episode reward
+    def forward(self, x):
+        model = torch.nn.Sequential(
+            self.l1,
+            self.l2,
+        )
+        return model(x)
 
-                if [i, p, policy[i][p]] == [latest_states[u][0], latest_states[u][1], latest_states[u][2]]:
-                    q[i][p][latest_states[u][2]] = (q[i][p][latest_states[u][2]]/2) + reward[ep]
+# INITIALIZE DQN
+policy = Policy()
+loss_fn = nn.MSELoss()
+optimizer = optimal.SGD(policy.parameters(), lr=alpha)
+scheduler = optimal.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
 
-    return q
+progress_bar = tqdm(range(max_episodes), bar_format="{l_bar}{bar}|{postfix}")
 
+for ep in range(max_episodes):
+    progress_bar.update(1)
+    progress_bar.set_postfix(Epsilon=str(round(epsilon, 2)))
 
-def greedy():
-    """
-    calculates optimal policy
-    """
-    for i in range(0,19):
-        for p in range(0,15):
+    # RESET
+    total_reward = 0
+    episode_loss = 0
+    state = env.reset()
 
-            # If state is unexplored, do not calculate optimal action
-            # Else, update the policy accoring to epsilon
+    for s in range(steps):
+        #  sample Q values from policy
+        Q = policy.forward(torch.from_numpy(state).type(torch.FloatTensor))  # " Q(s, a) "
 
-            if q[i][p][0] == 0 and q[i][p][1] == 0 and q[i][p][2] == 0:
-                policy[i][p] = None
-            else:
-                if epsilon > random.uniform(0,1):
-                    policy[i][p] = q[i][p].index(np.max(q[i][p]))
-                else:
-                    policy[i][p] = random.randint(0,2)
-    return policy
+        if np.random.rand(1) < epsilon:
+            action = env.action_space.sample()
+        else:
+            #  find optimal action according to policy (over axis -1)
+            _, max = torch.max(Q, -1)
+            action = max.item()
 
+        new_state, reward, terminal, _ = env.step(action)
 
-def calc_reward():
-    """
-    calculates episode reward by finding the maximum X value
-    """
-    arr = []
-    for i in range(1000):
-        arr.append(latest_states[i][0])
-    return np.max(arr)
+        # Adjust reward based on car position
+        reward = new_state[0] + 0.5
 
+        if new_state[0] > max_position:
+            max_position = new_state[0]
 
-env = gym.make('MountainCar-v0') # Make environemnt
+        if new_state[0] >= 5:
+            reward += 1
 
-while ep < max:
-    epsilon += 0.001 # Update epsilon for convergence
-    count = 0 # Reset frame counter
-    formatted_state = state_formatter(env.reset()) # Reset environment
-    while count < 999:
+        total_reward += reward
 
-        # If state is unexplored, use uniform random action
+        Q_new = policy.forward(torch.from_numpy(new_state).type(torch.FloatTensor))  # " find Q (s', a') "
 
-        if policy[formatted_state[0]][formatted_state[1]] == None:
-            policy[formatted_state[0]][formatted_state[1]] = random.randint(0,2)
+        #  find optimal action Q value for next step
+        new_max, _ = torch.max(Q_new, -1)  # " max(Q(s', a')) "
 
-        # Step forward in environment with action and receive new state
+        Q_target = Q.clone()
+        Q_target = Variable(Q_target.data)
 
-        state, rew, end, info = env.step(policy[formatted_state[0]][formatted_state[1]])
+        #  update target value function according to TD
+        Q_target[action] = reward + torch.mul(new_max.detach(), gamma)  # " reward + gamma*(max(Q(s', a')) "
 
-        # Set local state space
+        # Calculate loss
+        loss = loss_fn(Q, Q_target)  # " reward + gamma*(max(Q(s', a')) - Q(s, a)) "
+        episode_loss += loss.item()
 
-        latest_states[count][0] = formatted_state[0]
-        latest_states[count][1] = formatted_state[1]
-        latest_states[count][2] = policy[formatted_state[0]][formatted_state[1]]
+        # Update original policy according to Q_target ( supervised learning )
+        policy.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-        # Format new state space
+        #  Q and Q_target should converge
 
-        formatted_state = state_formatter(state)
-        count += 1
+        if terminal:
+            # Adjust hyperparameters on success
+            if new_state[0] >= 0.5:
+                successes += 1
+                epsilon *= decay
+                scheduler.step()
+                print("Success! "+str(successes)+" so far.")
 
-    reward.append(calc_reward()) # Append reward matrix for graph
-    print('#'*reward[ep]+" "+str(reward[ep])) # Graph
-    q = calc_q(latest_states) # Calculate Q
-    policy = greedy() # e-greedy function
-    if ep % 100 == 0:
+            break
+        else:
+            state = new_state # Reset state
 
-        # DEBUG:
-        print("EPISODE "+str(ep))
-        print("----------------------------")
-        print()
-        for i in policy:
-            print(bcolors.HEADER+str(i))
-        print(bcolors.ENDC)
-    ep += 1
+        # LOGGING
+        loss_history[ep] = episode_loss
+        reward_history[ep] = total_reward
+        max_position_history[ep] = max_position
+        epsilon_history[ep] = epsilon
+        final_position_history[ep] = new_state[0]
+
+    # GRAPHING
+p = pd.Series(final_position_history[:ep])
+ma = p.rolling(10).mean()
+
+ax[0][0].plot(reward_history, color="red")
+ax[1][0].plot(loss_history, color="red")
+ax[0][0].set_title('Reward History')
+ax[1][0].set_title('Loss History')
+ax[0][1].set_title('Max Position')
+ax[0][1].plot(ma, color="red")
+ax[0][1].plot(max_position_history, color="blue")
+ax[1][1].plot(epsilon_history, color="red")
+ax[1][1].set_title('Epsilon History')
+plt.show()
+
+# SAVE MODEL
+torch.save(policy.state_dict(), 'trained-10000.mdl')
