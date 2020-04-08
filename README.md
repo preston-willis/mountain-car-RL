@@ -16,4 +16,4 @@ All trained DQN models are stored in [Models/](https://github.com/iamPres/mounta
 ## DQN Performance
 ![GitHub Logo](/Figure_2.png)
 ## I2A Performance
-
+![GitHub Logo](/Figure_3.png)
