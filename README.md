@@ -11,4 +11,4 @@ Basic reinforcement learning implimentations for [Gym MountainCar-v0](https://gi
 ## Trained Models
 All trained DQN models are stored in [Models/](https://github.com/iamPres/mountain-car-RL/tree/DQN-learning/Models)
 
-![GitHub Logo](/Figure 2.png)
+![GitHub Logo](/Figure_2.png)
